@@ -86,8 +86,8 @@ Documentación API: **http://localhost:8000/docs**
 
 ## Base de datos
 
-- **Servidor:** 172.16.250.129
-- **Base de datos:** Aplicativo_LectorInversion
+- **Servidor:** `<IP_SERVIDOR_SQL>`
+- **Base de datos:** `<NOMBRE_BASE_DE_DATOS>`
 - **Tabla principal:** `pagare_inversiones`
 - Los scripts de creación están en `database/`. Ejecutarlos en orden numérico al montar el aplicativo por primera vez.
 

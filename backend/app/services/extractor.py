@@ -297,6 +297,11 @@ def procesar_pdf(pdf_bytes: bytes) -> dict:
     return _extraer_datos(texto)
 
 
+def extraer_texto_plano(pdf_bytes: bytes) -> str:
+    """Devuelve el texto crudo extraído del PDF, sin normalizar ni parsear."""
+    return _extraer_texto_pdf(pdf_bytes)
+
+
 # ── Modo debug ───────────────────────────────────────────────────────────────
 
 def extraer_texto_para_debug(pdf_bytes: bytes) -> dict:

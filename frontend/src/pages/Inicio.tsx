@@ -4,6 +4,36 @@ import TarjetaComprobante from '../components/TarjetaComprobante'
 import { cargarComprobante } from '../services/comprobantes'
 import type { RespuestaCarga } from '../types/comprobante'
 
+const MXN = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
+
+function describir_error_br(e: Record<string, unknown>): string {
+  const fmtMXN = (v: unknown) => typeof v === 'number' ? MXN.format(v) : String(v)
+  const fmtPct = (v: unknown) => typeof v === 'number' ? `${v.toFixed(4)}%` : String(v)
+
+  switch (e.id) {
+    case 'BR-01':
+      return `Interés calculado no coincide con la fórmula — Esperado: ${fmtMXN(e.esperado)}, Obtenido: ${fmtMXN(e.obtenido)}`
+    case 'BR-02':
+      return `Importe neto al vencimiento incorrecto — Esperado: ${fmtMXN(e.esperado)}, Obtenido: ${fmtMXN(e.obtenido)}`
+    case 'BR-03':
+      return `Los días entre fechas no coinciden con el plazo — Esperado: ${e.esperado} días, Obtenido: ${e.obtenido} días`
+    case 'BR-04':
+      return `El ISR no puede ser mayor al interés generado`
+    case 'BR-05':
+      return `La tasa después de impuestos (${fmtPct(e.tasa_despues)}) no puede superar la tasa antes de impuestos (${fmtPct(e.tasa_antes)})`
+    case 'BR-06':
+      return `La fecha de vencimiento debe ser posterior a la fecha de operación`
+    case 'BR-10': {
+      const campos = (e.campos_negativos as string[]).join(', ')
+      return `Campos con valores negativos: ${campos}`
+    }
+    case 'BR-11':
+      return `El importe de inversión debe ser mayor a cero`
+    default:
+      return JSON.stringify(e).slice(0, 200)
+  }
+}
+
 export default function Inicio() {
   const [cargando, setCargando] = useState(false)
   const [resultado, setResultado] = useState<RespuestaCarga | null>(null)
@@ -122,30 +152,97 @@ export default function Inicio() {
       </div>
 
       {/* Resultado (más ancho) */}
-      {resultado && (
-        <div className="max-w-4xl mx-auto mt-12 space-y-10">
-          <section>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-bold text-[#1e40af]">
-                Datos extraídos
-              </h2>
-              <span className="text-xs text-[#94a3b8] font-medium">
-                ID: <span className="font-mono text-[#64748b]">#{resultado.id}</span>
-              </span>
-            </div>
-            <TarjetaComprobante datos={resultado.datos} id={resultado.id} />
-          </section>
+      {resultado && (() => {
+        const v = resultado.validacion
+        const esInvalido = !v.schema_valido || !v.orden_correcto || v.errores.length > 0
 
-          <div className="flex justify-center pt-4">
-            <button
-              onClick={() => { setResultado(null); setError(null) }}
-              className="px-6 py-2.5 rounded-lg bg-[#ede9fe] hover:bg-[#ddd6fe] text-[#1e40af] text-sm font-semibold transition-colors"
-            >
-              ← Cargar otro comprobante
-            </button>
+        return (
+          <div className="max-w-4xl mx-auto mt-12 space-y-10">
+            <section>
+              {esInvalido ? (
+                /* ── Documento inválido ── */
+                <div className="bg-white rounded-xl border border-[#fecaca] overflow-hidden">
+                  {/* Cabecera roja */}
+                  <div className="px-6 py-5 bg-[#fef2f2] border-b border-[#fecaca] flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-[#ef4444] flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-bold text-base text-[#991b1b]">Documento inválido</p>
+                      <p className="text-xs text-[#b91c1c] mt-0.5">
+                        El archivo fue recibido pero no pasó la validación.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Detalle de errores */}
+                  <div className="px-6 py-5 space-y-4">
+                    {/* Validaciones básicas fallidas */}
+                    {(!v.schema_valido || !v.orden_correcto) && (
+                      <div className="flex flex-wrap gap-2">
+                        {!v.schema_valido && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-[#fef2f2] border-[#fecaca] text-[#991b1b]">
+                            <span className="font-bold">✗</span> JSON Schema inválido
+                          </span>
+                        )}
+                        {!v.orden_correcto && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-[#fef2f2] border-[#fecaca] text-[#991b1b]">
+                            <span className="font-bold">✗</span> Orden de campos incorrecto
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Lista de errores */}
+                    {v.errores.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#991b1b] mb-2">
+                          Errores encontrados
+                        </p>
+                        <ul className="space-y-2">
+                          {v.errores.map((e, i) => (
+                            <li
+                              key={i}
+                              className="text-xs px-4 py-3 rounded-lg border bg-[#fef2f2] border-[#fecaca] text-[#991b1b]"
+                            >
+                              {typeof e === 'string'
+                                ? e
+                                : describir_error_br(e as Record<string, unknown>)
+                              }
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* ── Documento válido ── */
+                <>
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-xl font-bold text-[#1e40af]">Datos extraídos</h2>
+                    <span className="text-xs text-[#94a3b8] font-medium">
+                      ID: <span className="font-mono text-[#64748b]">#{resultado.id}</span>
+                    </span>
+                  </div>
+                  <TarjetaComprobante datos={resultado.datos} id={resultado.id} />
+                </>
+              )}
+            </section>
+
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={() => { setResultado(null); setError(null) }}
+                className="px-6 py-2.5 rounded-lg bg-[#ede9fe] hover:bg-[#ddd6fe] text-[#1e40af] text-sm font-semibold transition-colors"
+              >
+                ← Cargar otro comprobante
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

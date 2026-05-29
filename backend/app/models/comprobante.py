@@ -46,6 +46,10 @@ class Comprobante(Base):
     folio_inversion = Column(String(50), nullable=True)
     folio_internet = Column(String(50), nullable=True)
 
+    # archivo original
+    hash_archivo = Column(String(64), nullable=True)
+    texto_plano = Column(Text, nullable=True)
+
     # validación y JSON completo
     schema_valido = Column(Boolean, nullable=True)
     validacion_json = Column(Text, nullable=True)

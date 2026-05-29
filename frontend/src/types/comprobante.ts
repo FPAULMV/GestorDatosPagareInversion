@@ -72,13 +72,17 @@ export interface ComprobanteResumen {
   id: number
   fecha_carga: string | null
   nombre_archivo: string | null
+  hash_archivo: string | null
   nombre_cliente: string | null
   contrato: string | null
   estado_operacion: string | null
-  importe_inversion_mxn: number | null
-  plazo_dias: number | null
   fecha_hora_operacion: string | null
   fecha_vencimiento: string | null
+  importe_inversion_mxn: number | null
+  interes_mxn: number | null
+  importe_neto_vencimiento_mxn: number | null
   folio_inversion: string | null
+  folio_internet: string | null
+  plazo_dias: number | null
   schema_valido: boolean | null
 }

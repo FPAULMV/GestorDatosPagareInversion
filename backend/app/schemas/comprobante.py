@@ -86,14 +86,18 @@ class ComprobanteResumen(BaseModel):
     id: int
     fecha_carga: Optional[datetime] = None
     nombre_archivo: Optional[str] = None
+    hash_archivo: Optional[str] = None
     nombre_cliente: Optional[str] = None
     contrato: Optional[str] = None
     estado_operacion: Optional[str] = None
-    importe_inversion_mxn: Optional[Decimal] = None
-    plazo_dias: Optional[int] = None
     fecha_hora_operacion: Optional[datetime] = None
     fecha_vencimiento: Optional[date] = None
+    importe_inversion_mxn: Optional[Decimal] = None
+    interes_mxn: Optional[Decimal] = None
+    importe_neto_vencimiento_mxn: Optional[Decimal] = None
     folio_inversion: Optional[str] = None
+    folio_internet: Optional[str] = None
+    plazo_dias: Optional[int] = None
     schema_valido: Optional[bool] = None
 
     model_config = {"from_attributes": True}
@@ -105,6 +109,8 @@ class ComprobanteDetalle(BaseModel):
     id: int
     fecha_carga: Optional[datetime] = None
     nombre_archivo: Optional[str] = None
+    hash_archivo: Optional[str] = None
+    texto_plano: Optional[str] = None
     nombre_cliente: Optional[str] = None
     contrato: Optional[str] = None
     estado_operacion: Optional[str] = None

@@ -2,8 +2,9 @@
 Servicio de validación.
 Responsabilidad: validar el JSON extraído contra el schema y las reglas de negocio.
 """
+import re
 from datetime import datetime, date
-from jsonschema import validate, ValidationError
+from jsonschema import Draft202012Validator
 
 _JSON_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -91,6 +92,100 @@ _ORDEN_ESPERADO = [
 ]
 
 
+# ── Etiquetas legibles para campos del schema ────────────────────────────────
+
+_ETIQUETAS_CAMPO: dict[str, str] = {
+    # Encabezado
+    "fecha_hora_consulta": "Fecha y hora de consulta",
+    "contrato": "Contrato",
+    "nombre_cliente": "Nombre del cliente",
+    # Producto
+    "tipo": "Tipo de producto",
+    "moneda": "Moneda",
+    # Notas legales
+    "garantia_ipab": "Garantía IPAB",
+    "nota_gat": "Nota GAT",
+    # Estado
+    "estado_operacion": "Estado de operación",
+    # Detalle
+    "fecha_hora_operacion": "Fecha y hora de operación",
+    "fecha_vencimiento": "Fecha de vencimiento",
+    "cuenta_cargo": "Cuenta cargo",
+    "cuenta_deposito": "Cuenta depósito",
+    "contrato_inversion": "Contrato de inversión",
+    "isr_impuesto_mxn": "ISR (impuesto)",
+    "importe_inversion_mxn": "Importe de inversión",
+    "interes_mxn": "Interés",
+    "plazo_dias": "Plazo (días)",
+    "importe_neto_vencimiento_mxn": "Importe neto al vencimiento",
+    "tasa_fija_anual_antes_impuestos_pct": "Tasa fija anual antes de impuestos",
+    "gat_nominal_antes_impuestos": "GAT Nominal",
+    "tasa_fija_anual_despues_impuestos_pct": "Tasa fija anual después de impuestos",
+    "gat_real_antes_impuestos": "GAT Real",
+    # Confirmación
+    "folio_inversion": "Folio de inversión",
+    "folio_internet": "Folio de internet",
+    # Secciones
+    "encabezado": "Encabezado",
+    "producto": "Producto",
+    "notas_legales": "Notas legales",
+    "detalle_comprobante": "Detalle del comprobante",
+    "datos_confirmacion_transferencia": "Confirmación de transferencia",
+}
+
+_TIPOS_ES: dict[str, str] = {
+    "string": "texto",
+    "number": "número",
+    "integer": "número entero",
+    "boolean": "booleano",
+    "array": "lista",
+    "object": "objeto",
+    "null": "nulo",
+}
+
+
+def _etiqueta(campo: str) -> str:
+    return _ETIQUETAS_CAMPO.get(campo, campo)
+
+
+def _mensaje_schema_error(e) -> str:
+    """Convierte un ValidationError de jsonschema en un mensaje legible en español."""
+    campo = list(e.path)[-1] if e.path else None
+    label = _etiqueta(str(campo)) if campo else None
+    val_actual = repr(e.instance) if e.instance is not None else "vacío (no encontrado)"
+
+    if e.validator == "required":
+        m = re.search(r"'([^']+)' is a required property", e.message)
+        campo_faltante = m.group(1) if m else e.message
+        return f"Falta el campo obligatorio: '{_etiqueta(campo_faltante)}'"
+
+    if e.validator == "type":
+        tipo_esperado = e.validator_value
+        if isinstance(tipo_esperado, list):
+            tipos = " o ".join(_TIPOS_ES.get(t, t) for t in tipo_esperado)
+        else:
+            tipos = _TIPOS_ES.get(tipo_esperado, tipo_esperado)
+        return f"'{label}': se esperaba {tipos}, valor obtenido: {val_actual}"
+
+    if e.validator == "pattern":
+        return f"'{label}': formato inválido, valor obtenido: {val_actual}"
+
+    if e.validator == "minLength":
+        return f"'{label}': el campo no puede estar vacío"
+
+    if e.validator == "enum":
+        opciones = ", ".join(str(v) for v in e.validator_value)
+        return f"'{label}': debe ser uno de [{opciones}], valor obtenido: {val_actual}"
+
+    if e.validator in ("minimum", "exclusiveMinimum"):
+        return f"'{label}': debe ser mayor que {e.validator_value}, valor obtenido: {val_actual}"
+
+    if e.validator == "maximum":
+        return f"'{label}': debe ser menor que {e.validator_value}, valor obtenido: {val_actual}"
+
+    return e.message
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _parsear_datetime(s: str | None) -> datetime | None:
@@ -116,11 +211,12 @@ def _parsear_date(s: str | None) -> date | None:
 # ── Validaciones ─────────────────────────────────────────────────────────────
 
 def _validar_schema(data: dict) -> tuple[bool, list[str]]:
-    try:
-        validate(instance=data, schema=_JSON_SCHEMA)
+    validator = Draft202012Validator(_JSON_SCHEMA)
+    errores = list(validator.iter_errors(data))
+    if not errores:
         return True, []
-    except ValidationError as e:
-        return False, [e.message]
+    mensajes = [_mensaje_schema_error(e) for e in errores]
+    return False, mensajes
 
 
 def _validar_orden(data: dict) -> bool:

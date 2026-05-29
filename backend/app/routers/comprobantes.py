@@ -3,7 +3,10 @@ Router de comprobantes.
 Responsabilidad: recibir peticiones HTTP, delegar al servicio y devolver la respuesta.
 No contiene lógica de negocio.
 """
+import hashlib
 import json
+import os
+from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
@@ -12,8 +15,10 @@ from sqlalchemy.orm import Session
 from app.utils.db import get_db
 from app.models.comprobante import Comprobante
 from app.schemas.comprobante import RespuestaCarga, ComprobanteResumen, ComprobanteDetalle
-from app.services.extractor import procesar_pdf, extraer_texto_para_debug
+from app.services.extractor import procesar_pdf, extraer_texto_para_debug, extraer_texto_plano
 from app.services.validador import validar_comprobante
+
+STORAGE_DIR = Path(os.getenv("STORAGE_PATH", "storage"))
 
 router = APIRouter(prefix="/api/comprobantes", tags=["Comprobantes"])
 
@@ -40,6 +45,17 @@ async def cargar_comprobante(
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="El archivo está vacío.")
 
+    # Generar hash SHA-256 del contenido
+    hash_archivo = hashlib.sha256(pdf_bytes).hexdigest()
+
+    # Guardar PDF en disco con el hash como nombre (si no existe ya)
+    ruta_destino = STORAGE_DIR / f"{hash_archivo}.pdf"
+    if not ruta_destino.exists():
+        ruta_destino.write_bytes(pdf_bytes)
+
+    # Extraer texto plano
+    texto = extraer_texto_plano(pdf_bytes)
+
     # Extraer datos del PDF
     try:
         datos = procesar_pdf(pdf_bytes)
@@ -53,7 +69,7 @@ async def cargar_comprobante(
     validacion = validar_comprobante(datos)
 
     # Guardar en BD
-    registro = _construir_modelo(datos, validacion, archivo.filename)
+    registro = _construir_modelo(datos, validacion, archivo.filename, hash_archivo, texto)
     db.add(registro)
     db.commit()
     db.refresh(registro)
@@ -82,7 +98,7 @@ def obtener_comprobante(registro_id: int, db: Session = Depends(get_db)):
 
 # ── Helper privado ───────────────────────────────────────────────────────────
 
-def _construir_modelo(datos: dict, validacion: dict, nombre_archivo: str) -> Comprobante:
+def _construir_modelo(datos: dict, validacion: dict, nombre_archivo: str, hash_archivo: str, texto_plano: str) -> Comprobante:
     enc = datos.get("encabezado", {}) or {}
     prod = datos.get("producto", {}) or {}
     notas = datos.get("notas_legales", {}) or {}
@@ -91,6 +107,8 @@ def _construir_modelo(datos: dict, validacion: dict, nombre_archivo: str) -> Com
 
     return Comprobante(
         nombre_archivo=nombre_archivo,
+        hash_archivo=hash_archivo,
+        texto_plano=texto_plano,
         fecha_hora_consulta=enc.get("fecha_hora_consulta"),
         contrato=enc.get("contrato"),
         nombre_cliente=enc.get("nombre_cliente"),
